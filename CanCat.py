@@ -46,6 +46,7 @@ if __name__ == "__main__":
     parser.add_argument('-f', '--filename', help='Load file (does not require CanCat device)') 
     parser.add_argument('-I', '--interface', help='Use a predefined Interface (%s)' % interface_names) 
     parser.add_argument('-S', '--baud', help='Set the CAN Bus Speed (%s)' % (baud_nums)) 
+    parser.add_argument('-i', '--ipaddr', help='IP address to connect to')
 
     ifo = parser.parse_args()
 
@@ -63,6 +64,6 @@ if __name__ == "__main__":
         if baud_val == None:
             raise Exception("Invalid baud: %s.  Must use one of the following: %s" % (ifo.baud, baud_nums))
 
-    results = interactive(ifo.port, intro=intro, InterfaceClass=interface, load_filename=ifo.filename, can_baud=baud_val)
+    results = interactive(ifo.port, ifo.ipaddr, intro=intro, InterfaceClass=interface, load_filename=ifo.filename, can_baud=baud_val)
     if results == -1:
         print "Error.  Try '-h' from CLI for help."

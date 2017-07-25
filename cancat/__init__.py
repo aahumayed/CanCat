@@ -3,6 +3,7 @@ import sys
 import cmd
 import time
 import serial
+import socket
 import struct
 import threading
 import cPickle as pickle
@@ -149,7 +150,7 @@ def loadCanBuffer(filename):
     return pickle.load(file(filename))
 
 class CanInterface:
-    def __init__(self, port=serialdev, baud=baud, verbose=False, cmdhandlers=None, comment='', load_filename=None, orig_iface=None):
+    def __init__(self, port=None, ipaddr=None, baud=baud, verbose=False, cmdhandlers=None, comment='', load_filename=None, orig_iface=None):
         '''
         CAN Analysis Workspace
         This can be subclassed by vendor to allow more vendor-specific code 
@@ -167,6 +168,7 @@ class CanInterface:
         self._shutdown = False
         self.verbose = verbose
         self.port = port
+        self.ipaddr = ipaddr
         self._baud = baud
         self._io = None
         self._in_lock = None
@@ -187,10 +189,11 @@ class CanInterface:
             self.loadFromFile(load_filename)
             return
 
-        if self.port == None:
+        # Check if they specify a port or IP address, if none specified assume default serial port
+        if self.port == None and self.ipaddr == None:
             self.port = getDeviceFile()
 
-        if self.port == None:    # we're already past the "load_filename" section, must have a port.
+        if self.port == None and self.ipaddr == None:    # we're already past the "load_filename" section, must have a port.
             raise Exception("Cannot find device, and no filename specified.  Please try again.")
 
 
@@ -217,19 +220,34 @@ class CanInterface:
 
         self._startRxThread()
 
-    def _reconnect(self, port=None, baud=None):
+    def _reconnect(self, port=None, baud=None, ipaddr=None):
         '''
         Attempt to connect/reconnect to the CanCat Transceiver
         '''
-        if self.port == None and port == None:
-            print "cannot connect to an unspecified port"
+        if port != None:
+            self.port = port
+        if baud != None:
+            self._baud = baud
+        if ipaddr != None:
+            self.ipaddr = ipaddr
+
+        if self.port == None and self.ipaddr == None:
+            print "cannot connect to an unspecified port or IP address"
             return
 
+        # Close serial or socket
         if self._io != None:
             self._io.close()
 
-        self._io = serial.Serial(port=self.port, baudrate=self._baud, dsrdtr=True)
-        self._io.setDTR(True)
+        # Reconnect to serial
+        if(self.port != None):
+            self._io = serial.Serial(port=self.port, baudrate=self._baud, dsrdtr=True)
+            self._io.setDTR(True)
+
+        # Reconnect to network
+        else:
+            self._io = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._io.connect((self.ipaddr, 4444)) # TODO: allow users to specify port(?)
 
         # clear all locks and free anything waiting for them
         if self._in_lock != None:
@@ -254,6 +272,8 @@ class CanInterface:
         '''
         print "shutting down serial connection"
         if isinstance(self._io, serial.Serial):
+            self._io.close()
+        if isinstance(self._io, socket.socket):
             self._io.close()
         self._shutdown = True
         if self._commsthread != None:
@@ -296,74 +316,85 @@ class CanInterface:
                     self._rxtx_state = RXTX_SYNC
                     continue
 
-                # fill the queue
-                self._in_lock.acquire()
-                try:
-                    char = self._io.read()
+                # fill the queue - serial
+                if isinstance(self._io, serial.Serial):
+                    self._in_lock.acquire()
+                    try:
+                        char = self._io.read()
 
-                except serial.serialutil.SerialException, e:
-                    self.errorcode = e
-                    self.log("serial exception")
-                    if "disconnected" in e.message:
-                        self._io.close()
-                        self._rxtx_state = RXTX_DISCONN
-                    continue
-
-                finally:
-                    if self._in_lock.locked_lock():
-                        self._in_lock.release()
-
-                self._inbuf += char
-                self.log("RECV: %s" % repr(self._inbuf))
-
-                # make sure we're synced
-                if self._rxtx_state == RXTX_SYNC:
-                    if self._inbuf[0] != "@":
-                        self._queuelock.acquire()
-                        try:
-                            idx = self._inbuf.find('@')
-                            if idx == -1:
-                                self.log("sitting on garbage...", 3)
-                                continue
-
-                            trash = self._inbuf[:idx]
-                            self._trash.append(trash)
-
-                            self._inbuf = self._inbuf[idx:]
-                        finally:
-                            self._queuelock.release()
-
-                    self._rxtx_state = RXTX_GO
-
-                # handle buffer if we have anything in it
-                if self._rxtx_state == RXTX_GO:
-                    if len(self._inbuf) < 3: continue
-                    if self._inbuf[0] != '@': 
-                        self._rxtx_state = RXTX_SYNC
+                    except serial.serialutil.SerialException, e:
+                        self.errorcode = e
+                        self.log("serial exception")
+                        if "disconnected" in e.message:
+                            self._io.close()
+                            self._rxtx_state = RXTX_DISCONN
                         continue
 
-                    pktlen = ord(self._inbuf[1]) + 2        # <size>, doesn't include "@"
+                    finally:
+                        if self._in_lock.locked_lock():
+                            self._in_lock.release()
 
-                    if len(self._inbuf) >= pktlen:
-                        self._queuelock.acquire()
-                        try:
-                            cmd = ord(self._inbuf[2])                # first bytes are @<size>
-                            message = self._inbuf[3:pktlen]  
-                            self._inbuf = self._inbuf[pktlen:]
-                        finally:
-                            self._queuelock.release()
+                    self._inbuf += char
+                    self.log("RECV: %s" % repr(self._inbuf))
 
-                        #if we have a handler, use it
-                        cmdhandler = self._cmdhandlers.get(cmd)
-                        if cmdhandler != None:
-                            cmdhandler(message, self)
+                    # make sure we're synced
+                    if self._rxtx_state == RXTX_SYNC:
+                        if self._inbuf[0] != "@":
+                            self._queuelock.acquire()
+                            try:
+                                idx = self._inbuf.find('@')
+                                if idx == -1:
+                                    self.log("sitting on garbage...", 3)
+                                    continue
 
-                        # otherwise, file it
-                        else:
-                            self._submitMessage(cmd, message)
-                        self._rxtx_state = RXTX_SYNC
+                                trash = self._inbuf[:idx]
+                                self._trash.append(trash)
 
-                
+                                self._inbuf = self._inbuf[idx:]
+                            finally:
+                                self._queuelock.release()
+
+                        self._rxtx_state = RXTX_GO
+
+                    # handle buffer if we have anything in it
+                    if self._rxtx_state == RXTX_GO:
+                        if len(self._inbuf) < 3: continue
+                        if self._inbuf[0] != '@': 
+                            self._rxtx_state = RXTX_SYNC
+                            continue
+
+                        pktlen = ord(self._inbuf[1]) + 2        # <size>, doesn't include "@"
+
+                        if len(self._inbuf) >= pktlen:
+                            self._queuelock.acquire()
+                            try:
+                                cmd = ord(self._inbuf[2])                # first bytes are @<size>
+                                message = self._inbuf[3:pktlen]  
+                                self._inbuf = self._inbuf[pktlen:]
+                            finally:
+                                self._queuelock.release()
+
+                            #if we have a handler, use it
+                            cmdhandler = self._cmdhandlers.get(cmd)
+                            if cmdhandler != None:
+                                cmdhandler(message, self)
+
+                            # otherwise, file it
+                            else:
+                                self._submitMessage(cmd, message)
+                            self._rxtx_state = RXTX_SYNC
+
+                # do TCP/IP connectioni
+                elif isinstance(self._io, socket.socket):
+                    self._inbuf = self._io.recv(16384)
+                    cmd = ord(self._inbuf[2])
+                    message = self._inbuf[3:]
+                    cmdhandler = self._cmdhandlers.get(cmd)
+                    if cmdhandler != None:
+                        cmdhandler(message, self)
+                    else:
+                        self._submitMessage(cmd, message)
+
             except:
                 if self.verbose:
                     sys.excepthook(*sys.exc_info())
@@ -452,7 +483,10 @@ class CanInterface:
 
         self._out_lock.acquire()
         try:
-            self._io.write(msg)
+            if isinstance(self._io, serial.Serial):
+                self._io.write(msg)
+            elif isinstance(self._io, socket.socket):
+                self._io.send(msg)
         finally:
             self._out_lock.release()
         # FIXME: wait for response?
@@ -823,7 +857,7 @@ class CanInterface:
         Load a previous analysis session from a python dictionary object
         see: saveSession()
         '''
-        if isinstance(self._io, serial.Serial) and force==False:
+        if (isinstance(self._io, serial.Serial) or isinstance(self._io, socket.socket)) and force==False:
             print("Refusing to reload a session while active session!  use 'force=True' option")
             return
 
@@ -1276,7 +1310,7 @@ class GMInterface(CanInterface):
         self.setCanBaud(CAN_33KBPS)
 
 class CanInTheMiddleInterface(CanInterface):
-    def __init__(self, port=serialdev, baud=baud, verbose=False, cmdhandlers=None, comment='', load_filename=None, orig_iface=None):
+    def __init__(self, port=None, ipaddr=None, baud=baud, verbose=False, cmdhandlers=None, comment='', load_filename=None, orig_iface=None):
         '''
         CAN in the middle. Allows the user to determine what CAN messages are being
         sent by a device by isolating a device from the CAN network and using two
@@ -1301,7 +1335,7 @@ class CanInTheMiddleInterface(CanInterface):
         '''
         self.bookmarks_iso = []
         self.bookmark_info_iso = {}
-        CanInterface.__init__(self, port=port, baud=baud, verbose=verbose, cmdhandlers=cmdhandlers, comment=comment, load_filename=load_filename, orig_iface=orig_iface)
+        CanInterface.__init__(self, port=port, ipaddr=ipaddr, baud=baud, verbose=verbose, cmdhandlers=cmdhandlers, comment=comment, load_filename=load_filename, orig_iface=orig_iface)
         if load_filename is None:
             self.setCanMode(CMD_CAN_MODE_CITM)
         
@@ -1713,7 +1747,7 @@ class CanInTheMiddleInterface(CanInterface):
         Load a previous analysis session from a python dictionary object
         see: saveSession()
         '''
-        if isinstance(self._io, serial.Serial) and force==False:
+        if (isinstance(self._io, serial.Serial) or isinstance(self._io, socket.socket)) and force==False:
             print("Refusing to reload a session while active session!  use 'force=True' option")
             return
 
@@ -1768,11 +1802,11 @@ def getDeviceFile():
         if os.path.exists(devloc):
             return devloc
 
-def interactive(port=None, InterfaceClass=CanInterface, intro='', load_filename=None, can_baud=None):
+def interactive(port=None, ipaddr=None, InterfaceClass=CanInterface, intro='', load_filename=None, can_baud=None):
     global c
     import atexit
 
-    c = InterfaceClass(port=port, load_filename=load_filename)
+    c = InterfaceClass(port=port, ipaddr=ipaddr, load_filename=load_filename)
     atexit.register(cleanupInteractiveAtExit)
 
     if load_filename is None:

@@ -30,6 +30,9 @@ CMD_CAN_MODE_RESULT         = 0x37
 CMD_CAN_SEND_ISOTP_RESULT   = 0x38
 CMD_CAN_RECV_ISOTP_RESULT   = 0x39
 CMD_CAN_SENDRECV_ISOTP_RESULT = 0x3A
+CMD_SWCAN_RECV              =  0x3B
+CMD_SWCAN_SEND              =  0x3C
+
 
 CMD_PING                    = 0x41
 CMD_CHANGE_BAUD             = 0x42
@@ -995,7 +998,7 @@ class CanInterface:
 
         return filteredMsgs
 
-     def filterCanMsgsSW(self, start_msg=0, stop_msg=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None, ignore=[]):
+    def filterCanMsgsSW(self, start_msg=0, stop_msg=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None, ignore=[]):
         '''
         returns the received CAN messages between indexes "start_msg" and "stop_msg"
         but only messages to ID's that *do not* appear in the the baseline indicated 
@@ -1207,7 +1210,7 @@ class CanInterface:
         data_repeat = 0
         data_similar = 0
 
-       for idx, ts, arbid, msg in self.filterCanMsgsSW(start_msg, stop_msg, start_baseline_msg, stop_baseline_msg, arbids=arbids, ignore=ignore):
+        for idx, ts, arbid, msg in self.filterCanMsgsSW(start_msg, stop_msg, start_baseline_msg, stop_baseline_msg, arbids=arbids, ignore=ignore):
             diff = []
 
             # insert bookmark names/comments in appropriate places

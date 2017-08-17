@@ -23,6 +23,8 @@
 #define CMD_CAN_SEND_ISOTP_RESULT       0x38
 #define CMD_CAN_RECV_ISOTP_RESULT       0x39
 #define CMD_CAN_SENDRECV_ISOTP_RESULT   0x3A
+#define CMD_SWCAN_RECV                  0x3B
+#define CMD_SWCAN_SEND                  0x3C
 
 #define CMD_PING                 0x41
 #define CMD_CHANGE_BAUD          0x42

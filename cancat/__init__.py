@@ -177,6 +177,8 @@ class CanInterface:
 
         self.bookmarks = []
         self.bookmark_info = {}
+        self.bookmarks_sw = []
+        self.bookmark_sw_info = {}
 
         self.comments = []
         if cmdhandlers == None:
@@ -703,6 +705,26 @@ class CanInterface:
 
             yield((idx, ts, arbid, data))
 
+    def genCanMsgsSW(self, start=0, stop=None, arbids=None):
+        '''
+        CAN message generator.  takes in start/stop indexes as well as a list
+        of desired arbids (list)
+        '''
+        messages = self._messages.get(CMD_SWCAN_RECV, [])
+        if stop == None:
+            stop = len(messages)
+
+        for idx in xrange(start, stop):
+            ts, msg = messages[idx]
+
+            arbid, data = self._splitCanMsg(msg)
+
+            if arbids != None and arbid not in arbids:
+                # allow filtering of arbids
+                continue
+
+            yield((idx, ts, arbid, data))
+
     def _splitCanMsg(self, msg):
         '''
         takes in captured message
@@ -972,6 +994,28 @@ class CanInterface:
                 if (type(arbids) == list and arbid in arbids) or arbid not in ignore and (filter_ids==None or arbid not in filter_ids)]
 
         return filteredMsgs
+
+     def filterCanMsgsSW(self, start_msg=0, stop_msg=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None, ignore=[]):
+        '''
+        returns the received CAN messages between indexes "start_msg" and "stop_msg"
+        but only messages to ID's that *do not* appear in the the baseline indicated 
+        by "start_baseline_msg" and "stop_baseline_msg".
+
+        for message indexes, you *will* want to look into the bookmarking subsystem!
+        '''
+        self.log("starting filtering messages...")
+        if stop_baseline_msg != None:
+            self.log("ignoring arbids from baseline...")
+            # get a list of baseline arbids
+            filter_ids = { arbid:1 for ts,arbid,data in self.genCanMsgsSW(start_baseline_msg, stop_baseline_msg) 
+                }.keys()
+        else:
+            filter_ids = None
+        self.log("filtering messages...")
+        filteredMsgs = [(idx, ts,arbid,msg) for idx,ts,arbid,msg in self.genCanMsgsSW(start_msg, stop_msg, arbids=arbids) \
+                if (type(arbids) == list and arbid in arbids) or arbid not in ignore and (filter_ids==None or arbid not in filter_ids)]
+
+        return filteredMsgs
         
     def printCanMsgsByBookmark(self, start_bkmk=None, stop_bkmk=None, start_baseline_bkmk=None, stop_baseline_bkmk=None, 
                     arbids=None, ignore=[]):
@@ -1004,6 +1048,9 @@ class CanInterface:
 
     def printCanMsgs(self, start_msg=0, stop_msg=None, start_bkmk=None, stop_bkmk=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None, ignore=[]):
         print self.reprCanMsgs(start_msg, stop_msg, start_bkmk, stop_bkmk, start_baseline_msg, stop_baseline_msg, arbids, ignore)
+
+    def printCanMsgsSW(self, start_msg=0, stop_msg=None, start_bkmk=None, stop_bkmk=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None, ignore=[]):
+        print self.reprCanMsgsSW(start_msg, stop_msg, start_bkmk, stop_bkmk, start_baseline_msg, stop_baseline_msg, arbids, ignore)
 
     def reprCanMsgs(self, start_msg=0, stop_msg=None, start_bkmk=None, stop_bkmk=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None, ignore=[]):
         '''
@@ -1102,6 +1149,112 @@ class CanInterface:
                 diff.append("TS_delta: %.3f" % delta_ts)
 
             out.append(reprCanMsg(idx, ts, arbid, msg, comment='\t'.join(diff)))
+            last_ts = ts
+            last_msg = msg
+
+        out.append("Total Messages: %d  (repeat: %d / similar: %d)" % (msg_count, data_repeat, data_similar))
+
+        return "\n".join(out)
+
+    def reprCanMsgsSW(self, start_msg=0, stop_msg=None, start_bkmk=None, stop_bkmk=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None, ignore=[]):
+        '''
+        String representation of a set of CAN Messages.
+        These can be filtered by start and stop message indexes, as well as
+        use a baseline (defined by start/stop message indexes), 
+        by a list of "desired" arbids as well as a list of 
+        ignored arbids
+
+        Many functions wrap this one.
+        '''
+        out = []
+
+        if start_bkmk != None:
+            #start_msg = self.getMsgIndexFromBookmarkSW(start_bkmk)
+            print "Bookmarks not supported"
+
+        if stop_bkmk != None:
+            #stop_msg = self.getMsgIndexFromBookmarkSW(stop_bkmk)
+            print "Bookmarks not supported"
+
+
+
+        if start_msg in self.bookmarks_sw:
+            bkmk = self.bookmarks_sw.index(start_msg)
+            out.append("starting from bookmark %d: '%s'" % 
+                    (bkmk,
+                    self.bookmark_sw_info[bkmk].get('name'))
+                    )
+
+        if stop_msg in self.bookmarks_sw:
+            bkmk = self.bookmarks_sw.index(stop_msg)
+            out.append("stoppng at bookmark %d: '%s'" % 
+                    (bkmk,
+                    self.bookmark_sw_info[bkmk].get('name'))
+                    )
+
+        last_msg = None
+        next_bkmk = 0
+        next_bkmk_idx = 0
+
+        msg_count = 0
+        last_ts = None
+        tot_delta_ts = 0
+        counted_msgs = 0    # used for calculating averages, excluding outliers
+        
+        data_delta = None
+
+
+        data_repeat = 0
+        data_similar = 0
+
+       for idx, ts, arbid, msg in self.filterCanMsgsSW(start_msg, stop_msg, start_baseline_msg, stop_baseline_msg, arbids=arbids, ignore=ignore):
+            diff = []
+
+            # insert bookmark names/comments in appropriate places
+            while next_bkmk_idx < len(self.bookmarks_sw) and idx >= self.bookmarks_sw[next_bkmk_idx]:
+                out.append(self.reprBookmarkSW(next_bkmk_idx))
+                next_bkmk_idx += 1
+
+            msg_count += 1
+
+            # check data
+            byte_cnt_diff = 0
+            if last_msg != None:
+                if len(last_msg) == len(msg):
+                    for bidx in range(len(msg)):
+                        if last_msg[bidx] != msg[bidx]:
+                            byte_cnt_diff += 1
+
+                    if byte_cnt_diff == 0:
+                        diff.append("REPEAT")
+                        data_repeat += 1
+                    elif byte_cnt_diff <=4:
+                        diff.append("Similar")
+                        data_similar += 1
+                    # FIXME: make some better heuristic to identify "out of norm"
+
+            # look for ASCII data (4+ consecutive bytes)
+            if hasAscii(msg):
+                diff.append("ASCII: %s" % repr(msg))
+
+            # calculate timestamp delta and comment if out of whack
+            if last_ts == None:
+                last_ts = ts
+
+            delta_ts = ts - last_ts
+            if counted_msgs:
+                avg_delta_ts = tot_delta_ts / counted_msgs
+            else:
+                avg_delta_ts = delta_ts
+
+
+            if abs(delta_ts - avg_delta_ts) <= delta_ts:
+                tot_delta_ts += delta_ts
+                counted_msgs += 1
+            else:
+                diff.append("TS_delta: %.3f" % delta_ts)
+
+            out.append(reprCanMsgSW(idx, ts, arbid, msg, comment='\t'.join(diff)))
             last_ts = ts
             last_msg = msg
 

@@ -3,8 +3,10 @@
  * creating and sending CAN frames and handles the serial communication.
  */
 
+#include <SPI.h>
 #include <due_can.h>
 #include <limits.h>
+#include "mcp_can.h"
 #include "autobaud.h"
 #include "defines.h"
 #include "queue.h"
@@ -14,6 +16,8 @@
 #include "sniffing.h"
 
 #define Serial SerialUSB
+
+MCP_CAN SWCAN(23);
 
 /* circular buffers for receiving and sending CAN frames */
 Queue<CAN_FRAME> can_rx_frames0(CAN_BUFFER_LEN);
@@ -106,6 +110,23 @@ void loop()
         {
             can_tx_frames1.remove();
         }
+    }
+    if(CAN_MSGAVAIL == SWCAN.checkReceive())
+    {
+        uint32_t canId;
+        uint8_t len;
+        uint8_t buf[12];
+        SWCAN.readMsgBufID(&canId, &len, buf+4);    // read data,  len: data length, buf: data buf
+
+        // requires a binary client on the other end.  this should be python
+        
+        buf[0] = (canId >> 24) & 0xff;
+        buf[1] = (canId >> 16) & 0xff;
+        buf[2] = (canId >> 8) & 0xff;
+        buf[3] = canId & 0xff;
+        // FIXME: grab extflags and put in here.
+        
+        send(buf, CMD_SWCAN_RECV, len + 4);
     }
 
     /* Push received frames back up */
@@ -211,6 +232,7 @@ void loop()
                     results = 0;
                     initialized = 0;
                 }
+                CAN.begin(CAN_33KBPS);
                 send(&results, CMD_CAN_BAUD_RESULT, 1);
                 break;
                 

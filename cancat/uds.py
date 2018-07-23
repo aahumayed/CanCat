@@ -338,11 +338,11 @@ class UDS:
     def EcuReset(self, rst_type=0x1):
         return self._do_Function(SVC_ECU_RESET, subfunc=rst_type)
 
-    def ClearDiagnosticInformation(self):
-        pass
+    def ClearDiagnosticInformation(self, groupOfDTC):
+        msg = self._do_Function(SVC_CLEAR_DIAGNOSTICS_INFORMATION,data =struct.pack('>HB', groupOfDTC >> 8, groupOfDTC & 0xFF), service=0x54)
+        #msg = self._do_Function(SVC_CLEAR_DIAGNOSTICS_INFORMATION,data =groupOfDTC.decode('hex'), service=0x54)
+        return msg
     def ReadDTCInformation(self, subfunc,data=None):
-        #struct.pack('>I', addr)[1:]     
-        #          _do_Function(self, func, data=None, subfunc=None, service=None)
         if data != None:
             msg = self._do_Function(SVC_READ_DTC_INFORMATION,subfunc =subfunc, data= struct.pack('>H', data)[1:], service=0x59)
         else:

@@ -72,6 +72,30 @@ SVC_CONTROL_DTC_SETTING =                   0x85
 
 UDS_SVCS = { v:k for k,v in globals().items() if k.startswith('SVC_') }
 
+# List of ReadDTCInformation request's subfunctions (byte 2)
+RDTC_reportNumberOfDTCByStatusMaskSub =                             0x01
+RDTC_reportDTCByStatusMask =                                        0x02
+RDTC_reportMirrorMemoryDTCByStatusMask =                            0x0f
+RDTC_reportNumberOfMirrorMemoryDTCByStatusMask =                    0x11
+RDTC_reportNumberOfEmissionsRelatedOBDDTCByStatusMask =             0x12
+RDTC_reportEmissionsRelatedOBDDTCByStatusMask =                     0x13
+RDTC_reportDTCSnapshotIdentification =                              0x03 
+RDTC_reportDTCSnapshotRecordByDTCNumber =                           0x04
+RDTC_reportDTCSnapshotRecordByRecordNumber =                        0x05
+RDTC_reportDTCExtendedDataRecordByDTCNumber =                       0x06
+RDTC_reportMirrorMemoryDTCExtendedDataRecordByDTCNumber =           0x10
+RDTC_reportNumberOfDTCBySeverityMaskRecord =                        0x07
+RDTC_reportDTCBySeverityMaskRecord =                                0x08
+RDTC_reportSeverityInformationOfDTC =                               0x09
+RDTC_reportSupportedDTC =                                           0x0a
+RDTC_reportFirstTestFailedDTC =                                     0x0b
+RDTC_reportFirstConfirmedDTC =                                      0x0c
+RDTC_reportMostRecentTestFailedDTC =                                0x0d
+RDTC_reportMostRecentConfirmedDTC =                                 0x0e
+RDTC_reportDTCFaultDetectionCounter =                               0x14
+RDTC_reportDTCWithPermanentStatus =                                 0x15
+
+
 POS_RESP_CODES = { (k|0x40) : "OK_" + v.lower() for k,v in UDS_SVCS.items() }
 POS_RESP_CODES[0] = 'Success'
 
@@ -316,8 +340,14 @@ class UDS:
 
     def ClearDiagnosticInformation(self):
         pass
-    def ReadDTCInfomation(self):
-        pass
+    def ReadDTCInformation(self, subfunc,data=None):
+        #struct.pack('>I', addr)[1:]     
+        #          _do_Function(self, func, data=None, subfunc=None, service=None)
+        if data != None:
+            msg = self._do_Function(SVC_READ_DTC_INFORMATION,subfunc =subfunc, data= struct.pack('>H', data)[1:], service=0x59)
+        else:
+            msg = self._do_Function(SVC_READ_DTC_INFORMATION,subfunc =subfunc, service=0x59)
+        return msg
     def ReadDataByPeriodicIdentifier(self, pdid):
         pass
     def DynamicallyDefineDataIdentifier(self):

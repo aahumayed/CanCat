@@ -355,11 +355,25 @@ class UDS:
         pass
     def InputOutputControlByIdentifier(self, iodid):
         pass
-    def RoutineControl(self, rid):
-        pass
-    def TransferData(self, did):
-        pass
-    def RequestTransferExit(self):
+    def RoutineControl(self, routineControlType, rid, routineCOR=None):#Bytes: 2, 3 & 4, 5 ...
+        rlen = 0
+        if routineCOR != None:
+            rlen= len(routineCOR)
+        if rlen > 4095:
+            raise Exception("Size of routineControlOptionRecord is too long for one ISO-TP message (<4096)")
+        if routineCOR != None:
+            data = struct.pack('>H', rid)+routineCOR.decode('hex')
+        elif routineCOR == None:
+            data = struct.pack('>H', rid)
+        msg = self._do_Function(SVC_ROUTINE_CONTROL,subfunc = routineControlType, data= data, service=0x71)
+        return msg
+    def TransferData(self, blockSequenceCounter, data):
+        dlen=len(data)
+        if dlen > 4095:
+            raise Exception("Data too long for one ISO-TP message (<4096)")
+        msg = self._do_Function(SVC_TRANSFER_DATA,subfunc = blockSequenceCounter, data= data.decode('hex'), service=0x76)
+        return msg
+    def RequestTransferExit(self, transferRPR=None):
         msg = self._do_Function(SVC_REQUEST_TRANSFER_EXIT, service=0x77)
             #msg = self._do_Function(SVC_REQUEST_TRANSFER_EXIT,subfunc = struct.pack('>H',transferRPR.decode('hex') , service=0x77)
         return msg

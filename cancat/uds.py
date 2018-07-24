@@ -360,7 +360,9 @@ class UDS:
     def TransferData(self, did):
         pass
     def RequestTransferExit(self):
-        pass
+        msg = self._do_Function(SVC_REQUEST_TRANSFER_EXIT, service=0x77)
+            #msg = self._do_Function(SVC_REQUEST_TRANSFER_EXIT,subfunc = struct.pack('>H',transferRPR.decode('hex') , service=0x77)
+        return msg
     def ControlDTCSetting(self, DTCSettingType):
         msg = self._do_Function(SVC_CONTROL_DTC_SETTING,subfunc = DTCSettingType , service=0xc5)
         return msg

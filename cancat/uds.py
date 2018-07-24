@@ -79,7 +79,7 @@ RDTC_reportMirrorMemoryDTCByStatusMask =                            0x0f
 RDTC_reportNumberOfMirrorMemoryDTCByStatusMask =                    0x11
 RDTC_reportNumberOfEmissionsRelatedOBDDTCByStatusMask =             0x12
 RDTC_reportEmissionsRelatedOBDDTCByStatusMask =                     0x13
-RDTC_reportDTCSnapshotIdentification =                              0x03 
+RDTC_reportDTCSnapshotIdentification =                              0x03
 RDTC_reportDTCSnapshotRecordByDTCNumber =                           0x04
 RDTC_reportDTCSnapshotRecordByRecordNumber =                        0x05
 RDTC_reportDTCExtendedDataRecordByDTCNumber =                       0x06
@@ -149,12 +149,12 @@ class UDS:
                 errcode = ord(msg[2])
 
             if svc_resp == svc + 0x40:
-                if self.verbose: 
+                if self.verbose:
                     print "Positive Response!"
 
             negresprepr = NEG_RESP_CODES.get(errcode)
             if negresprepr != None and svc_resp != svc + 0x40:
-                if self.verbose > 1: 
+                if self.verbose > 1:
                     print negresprepr + "\n"
                 # TODO: Implement getting final message if ResponseCorrectlyReceivedResponsePending is received
                 if errcode != 0x78: # Don't throw an exception for ResponseCorrectlyReceivedResponsePending
@@ -163,7 +163,7 @@ class UDS:
 
         return msg
 
-       
+
     def _do_Function(self, func, data=None, subfunc=None, service=None):
 
         omsg = chr(func)
@@ -207,7 +207,7 @@ class UDS:
         currIdx = self.c.getCanMsgCount()
         return self._do_Function(SVC_READ_MEMORY_BY_ADDRESS, subfunc=0x24, data=struct.pack(">IH", address, size), service = 0x63)
         #return self.xmit_recv("\x23\x24" + struct.pack(">I", address) + struct.pack(">H", size), service = 0x63)
-        
+
     def ReadDID(self, did):
         '''
         Read the Data Identifier specified from the ECU.
@@ -224,7 +224,7 @@ class UDS:
 
         Returns: The response ISO-TP message as a string
         '''
-        msg = self._do_Function(SVC_WRITE_DATA_BY_IDENTIFIER,struct.pack('>H', did) + data, service=0x62)
+        msg = self._do_Function(SVC_WRITE_DATA_BY_IDENTIFIER,struct.pack('>H', did) + data, service=0x6e)
         #msg = self.xmit_recv("22".decode('hex') + struct.pack('>H', did), service=0x62)
         return msg
 
@@ -246,7 +246,7 @@ class UDS:
             print "Error received: {}".format(msg.encode('hex'))
             return msg
         max_txfr_num_bytes = ord(msg[1]) >> 4 # number of bytes in the max tranfer length parameter
-        max_txfr_len = 0 
+        max_txfr_len = 0
         for i in range(2,2+max_txfr_num_bytes):
             max_txfr_len <<= 8
             max_txfr_len += ord(msg[i])
@@ -289,7 +289,7 @@ class UDS:
         lenlenbyte = (lenlen << 4) | addrlen
 
         msg = self._do_Function(SVC_READ_MEMORY_BY_ADDRESS, data=struct.pack('<BI' + lfmt, lenlenbyte, address, length), service=0x63)
-        
+
         return msg
 
     def writeMemoryByAddress(self, address, data, lenlen=1, addrlen=4):
@@ -308,7 +308,7 @@ class UDS:
 
         msg = self._do_Function(SVC_WRITE_MEMORY_BY_ADDRESS, data=data, service=0x63)
         #msg = self.xmit_recv(data, service=0x63)
-        
+
         return msg
 
 
@@ -316,7 +316,7 @@ class UDS:
         '''
         Work in progress!
         '''
-        msg = self._do_Function(SVC_REQUEST_UPLOAD, subfunc=data_format, data = chr(addr_format) + struct.pack('>I', addr)[1:] +  struct.pack('>I', length)[1:]) 
+        msg = self._do_Function(SVC_REQUEST_UPLOAD, subfunc=data_format, data = chr(addr_format) + struct.pack('>I', addr)[1:] +  struct.pack('>I', length)[1:])
 
         sid, lfmtid, maxnumblocks = struct.unpack('>BBH', msg[:4])
 
@@ -348,8 +348,9 @@ class UDS:
         else:
             msg = self._do_Function(SVC_READ_DTC_INFORMATION,subfunc =subfunc, service=0x59)
         return msg
-    def ReadDataByPeriodicIdentifier(self, pdid):
-        pass
+    def ReadDataByPeriodicIdentifier(self, tmode, pdid):
+        msg = self._do_Function(SVC_READ_DATA_BY_PERIODIC_IDENTIFIER,subfunc =tmode, data= struct.pack('>B', pdid) , service=0x6a)
+        return msg
     def DynamicallyDefineDataIdentifier(self):
         pass
     def InputOutputControlByIdentifier(self, iodid):
@@ -370,7 +371,7 @@ class UDS:
         try:
             for x in range(start, end):
                 try:
-                    if self.verbose: 
+                    if self.verbose:
                         sys.stderr.write(' %x ' % x)
 
                     val = self.ReadDID(x)
@@ -420,7 +421,7 @@ def printUDSSession(c, tx_arbid, rx_arbid=None, paginate=45):
     msgs = [msg for msg in c.genCanMsgs(arbids=[tx_arbid, rx_arbid])]
 
     msgs_idx = 0
-    
+
     linect = 1
     while msgs_idx < len(msgs):
         arbid, isotpmsg, count = cisotp.msg_decode(msgs, msgs_idx)
@@ -436,5 +437,3 @@ def printUDSSession(c, tx_arbid, rx_arbid=None, paginate=45):
                 raw_input("%x)  PRESS ENTER" % linect)
 
         linect += 1
-        
-

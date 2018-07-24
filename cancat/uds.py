@@ -361,8 +361,9 @@ class UDS:
         pass
     def RequestTransferExit(self):
         pass
-    def ControlDTCSetting(self):
-        pass
+    def ControlDTCSetting(self, DTCSettingType):
+        msg = self._do_Function(SVC_CONTROL_DTC_SETTING,subfunc = DTCSettingType , service=0xc5)
+        return msg
 
 
 

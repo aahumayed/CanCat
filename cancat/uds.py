@@ -353,9 +353,10 @@ class UDS:
         return msg
     def DynamicallyDefineDataIdentifier(self):
         pass
-    def InputOutputControlByIdentifier(self, iodid):
-        pass
-    def RoutineControl(self, routineControlType, rid, routineCOR=None):#Bytes: 2, 3 & 4, 5 ...
+    def InputOutputControlByIdentifier(self, iodid, controlOptionRecord):
+        #msg = self._do_Function(SVC_INPUT_OUTPUT_CONTROL_BY_IDENTIFIER,subfunc = iodid, data= data, service=0x6f)
+        #return msg
+    def RoutineControl(self, routineControlType, rid, routineCOR=None):
         rlen = 0
         if routineCOR != None:
             rlen= len(routineCOR)

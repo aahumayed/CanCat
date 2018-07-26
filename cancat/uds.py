@@ -353,9 +353,22 @@ class UDS:
         return msg
     def DynamicallyDefineDataIdentifier(self):
         pass
+    '''
+    InputOutputControlByIdentifier service: The client requests the control of an input/output specific to the server
+    dataIdentifier (iodid): This parameter identifies server local input signal(s), internal parameter(s) or output signal(s)
+    controlOptionRecord: The controlOptionRecord of each dataIdentifier consists of one or multiple bytes (controlState#1/inputOutputControlParameter to controlState#m).
+    ControlState#1 can be used as either an InputOutputControlParameter that describes how the server shall control its inputs or outputs, or as an additional controlState byte
+    '''
     def InputOutputControlByIdentifier(self, iodid, controlOptionRecord):
         #msg = self._do_Function(SVC_INPUT_OUTPUT_CONTROL_BY_IDENTIFIER,subfunc = iodid, data= data, service=0x6f)
         #return msg
+        pass
+    '''
+    RoutineControl service: The client requests to start, stop a routine in the server(s) or requests the routine results
+    routineIdentifier (rid): This parameter identifies a server local routine and is out of the range of defined dataIdentifiers
+    routineControlOptionRecord (routineCOR): This parameter record contains either: 1) routine entry option parameters, which startUpVariables, etc.); or
+    2) routine exit option parameters which optionally timeToExpireBeforeRoutineStops, variables, etc
+    '''
     def RoutineControl(self, routineControlType, rid, routineCOR=None):
         rlen = 0
         if routineCOR != None:

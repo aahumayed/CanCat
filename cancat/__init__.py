@@ -557,8 +557,8 @@ class CanInterface:
         resval = ord(result)
         if resval != 0:
             print "ISOTPxmit() failed: %s" % CAN_RESPS.get(resval)
-
-        msg = self._isotp_get_msg(rx_arbid, start_index = currIdx, service = service, timeout = timeout)
+        # service parameter is removed from the following function call to ensure its uds-independece
+        msg = self._isotp_get_msg(rx_arbid, start_index = currIdx, timeout = timeout)
         return msg
 
     def _isotp_get_msg(self, rx_arbid, start_index=0, service=None, timeout=None):
@@ -574,7 +574,8 @@ class CanInterface:
 
             if len(msgs):
                 return msg
-                '''try:
+                ''' Commented out to keep _isotp_get_msg function uds-independent. The intended functionality is moved to uds.py
+                try:
                     # Check that the message is for the expected service, if specified
                     arbid, msg, count = iso_tp.msg_decode(msgs)
                     if ord(msg[0]) == 0x7e:  # response for TesterPresent... ignore

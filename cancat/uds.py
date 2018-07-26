@@ -139,6 +139,9 @@ class UDS:
                 # TODO: Implement getting final message if ResponseCorrectlyReceivedResponsePending is received
                 if errcode != 0x78: # Don't throw an exception for ResponseCorrectlyReceivedResponsePending
                     raise NegativeResponseException(errcode, svc, msg)
+                elif errcode ==0x78:
+                    print "errorcode = 0x78"
+                    msg = self.c._isotp_get_msg(rx_arbid= self.rx_arbid, start_index = self.c.getCanMsgCount()+1)
 
 
         return msg

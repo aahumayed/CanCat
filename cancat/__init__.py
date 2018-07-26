@@ -573,6 +573,7 @@ class CanInterface:
             msgs = [msg for msg in self.genCanMsgs(start=start_index, arbids=[rx_arbid])]
 
             if len(msgs):
+                arbid, msg, count = iso_tp.msg_decode(msgs)
                 return msg
                 ''' Commented out to keep _isotp_get_msg function uds-independent. The intended functionality is moved to uds.py
                 try:

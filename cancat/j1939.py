@@ -18,10 +18,10 @@ class J1939:
         f=open("J1939db.json", "r")
         self.j1939DB = json.load(f)
 
-    def printJ1939Msgs(self, start_msg=0, stop_msg=None, start_bkmk=None, stop_bkmk=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None, priority=None, pgns=None, sourceAddresses=None, spns=None, ignore=[]):
-        print self.reprCanMsgs(start_msg, stop_msg, start_bkmk, stop_bkmk, start_baseline_msg, stop_baseline_msg, arbids, priority, pgns, sourceAddresses, spns, ignore)
+    def printJ1939Msgs(self, start_msg=0, stop_msg=None, start_bkmk=None, stop_bkmk=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None, priorities=None, pgns=None, sourceAddresses=None, spns=None, ignore=[]):
+        print self.reprCanMsgs(start_msg, stop_msg, start_bkmk, stop_bkmk, start_baseline_msg, stop_baseline_msg, arbids, priorities, pgns, sourceAddresses, spns, ignore)
 
-    def reprCanMsgs(self, start_msg=0, stop_msg=None, start_bkmk=None, stop_bkmk=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None,priority=None, pgns=None, sourceAddresses=None, spns=None, ignore=[]):
+    def reprCanMsgs(self, start_msg=0, stop_msg=None, start_bkmk=None, stop_bkmk=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None,priorities=None, pgns=None, sourceAddresses=None, spns=None, ignore=[]):
         '''
         String representation of a set of CAN Messages.
         These can be filtered by start and stop message indexes, as well as
@@ -70,7 +70,7 @@ class J1939:
         data_repeat = 0
         data_similar = 0
 
-        for idx, ts, arbid, pgns, msg in self.filterCanMsgs(start_msg, stop_msg, start_baseline_msg, stop_baseline_msg, arbids=arbids, pgns=pgns,sourceAddresses=sourceAddresses, ignore=ignore):
+        for idx, ts, arbid, pgns, msg in self.filterCanMsgs(start_msg, stop_msg, start_baseline_msg, stop_baseline_msg, arbids=arbids, priorities=priorities, pgns=pgns,sourceAddresses=sourceAddresses, ignore=ignore):
             diff = []
 
             # insert bookmark names/comments in appropriate places
@@ -132,7 +132,7 @@ class J1939:
         priority, pgn, pgnName, sourceAddress = splitID(self, arbid)
         return "%.8d %8.3f ID: %.3x, Priority: %d, PGN: %d (%s), SA: %d,  Len: %.2x, Data: %-18s\t%s" % (idx, ts, arbid, priority, pgn, pgnName, sourceAddress, len(data), data.encode('hex'), comment)
 
-    def filterCanMsgs(self, start_msg=0, stop_msg=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None, priority=None, pgns=None, sourceAddresses=None, spns=None, ignore=[]):
+    def filterCanMsgs(self, start_msg=0, stop_msg=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None, priorities=None, pgns=None, sourceAddresses=None, spns=None, ignore=[]):
         '''
         returns the received CAN messages between indexes "start_msg" and "stop_msg"
         but only messages to ID's that *do not* appear in the the baseline indicated
@@ -149,12 +149,12 @@ class J1939:
         else:
             filter_ids = None
         self.c.log("filtering messages...")
-        filteredMsgs = [(idx, ts,arbid, pgn, msg) for idx, ts,arbid, pgn, msg in self.genCanMsgs(start_msg, stop_msg, arbids=arbids, pgns=pgns,sourceAddresses=sourceAddresses)
+        filteredMsgs = [(idx, ts,arbid, pgn, msg) for idx, ts,arbid, pgn, msg in self.genCanMsgs(start_msg, stop_msg, arbids=arbids, priorities=priorities, pgns=pgns,sourceAddresses=sourceAddresses)
                 if (type(arbids) == list and arbid in arbids) or arbid not in ignore and (filter_ids==None or arbid not in filter_ids)]
 # (idx, ts, arbid, pgn, data)
         return filteredMsgs
 
-    def genCanMsgs(self, start=0, stop=None, arbids=None, priority=None, pgns=None, sourceAddresses=None, spns=None):
+    def genCanMsgs(self, start=0, stop=None, arbids=None, priorities=None, pgns=None, sourceAddresses=None, spns=None):
             '''
             CAN message generator.  takes in start/stop indexes as well as a list
             of desired arbids (list)
@@ -179,9 +179,9 @@ class J1939:
                 if pgns != None and pgn not in pgns:
                     # allow filtering of arbids
                     continue
-                #if priority != None and priority not in priority:
+                if priorities != None and priority not in priorities:
                     # allow filtering of arbids
-                #    continue
+                    continue
                 if sourceAddresses != None and sa not in sourceAddresses:
                     # allow filtering of arbids
                    continue

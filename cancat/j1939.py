@@ -70,7 +70,7 @@ class J1939:
         data_repeat = 0
         data_similar = 0
 
-        for idx, ts, arbid, pgns, msg in self.filterCanMsgs(start_msg, stop_msg, start_baseline_msg, stop_baseline_msg, arbids=arbids, pgns=pgns, ignore=ignore):
+        for idx, ts, arbid, pgns, msg in self.filterCanMsgs(start_msg, stop_msg, start_baseline_msg, stop_baseline_msg, arbids=arbids, pgns=pgns,sourceAddresses=sourceAddresses, ignore=ignore):
             diff = []
 
             # insert bookmark names/comments in appropriate places
@@ -149,7 +149,7 @@ class J1939:
         else:
             filter_ids = None
         self.c.log("filtering messages...")
-        filteredMsgs = [(idx, ts,arbid, pgn, msg) for idx, ts,arbid, pgn, msg in self.genCanMsgs(start_msg, stop_msg, arbids=arbids, pgns=pgns)
+        filteredMsgs = [(idx, ts,arbid, pgn, msg) for idx, ts,arbid, pgn, msg in self.genCanMsgs(start_msg, stop_msg, arbids=arbids, pgns=pgns,sourceAddresses=sourceAddresses)
                 if (type(arbids) == list and arbid in arbids) or arbid not in ignore and (filter_ids==None or arbid not in filter_ids)]
 # (idx, ts, arbid, pgn, data)
         return filteredMsgs
@@ -182,9 +182,9 @@ class J1939:
                 #if priority != None and priority not in priority:
                     # allow filtering of arbids
                 #    continue
-                #if sourceAddresses != None and sa not in sourceAddresses:
+                if sourceAddresses != None and sa not in sourceAddresses:
                     # allow filtering of arbids
-                #    continue
+                   continue
 
 
                 yield((idx, ts, arbid, pgn, data))

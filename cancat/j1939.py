@@ -70,7 +70,7 @@ class J1939:
         data_repeat = 0
         data_similar = 0
 
-        for idx, ts, arbid, pgns, msg in self.filterCanMsgs(start_msg, stop_msg, start_baseline_msg, stop_baseline_msg, arbids=arbids, priorities=priorities, pgns=pgns,sourceAddresses=sourceAddresses, ignore=ignore):
+        for idx, ts, arbid, pgns, msg in self.filterCanMsgs(start_msg, stop_msg, start_baseline_msg, stop_baseline_msg, arbids=arbids, priorities=priorities, pgns=pgns,sourceAddresses=sourceAddresses, spns=spns, ignore=ignore):
             diff = []
 
             # insert bookmark names/comments in appropriate places
@@ -129,8 +129,15 @@ class J1939:
         #TODO: make some repr magic that spits out known ARBID's and other subdata
         if comment == None:
             comment = ''
-        priority, pgn, pgnName, sourceAddress = splitID(self, arbid)
-        return "%.8d %8.3f ID: %.3x, Priority: %d, PGN: %d (%s), SA: %d,  Len: %.2x, Data: %-18s\t%s" % (idx, ts, arbid, priority, pgn, pgnName, sourceAddress, len(data), data.encode('hex'), comment)
+        priority, pgn, pgnName, sourceAddress = self.splitID(arbid)
+        spns= self.getSPNs(pgn)
+        d = ""
+        if spns != None:
+            for spn in spns:
+                d+= getSpnInfo(self, spn,int(data.encode('hex'), 16))
+                #d+='SPN: ',value,', (',name,') '
+        return "%.8d %8.3f ID: %.3x, Priority: %d, PGN: %d, SA: %d,  Len: %.2x, Data: %-18s\t%s" % (idx, ts, arbid, priority, pgn, sourceAddress, len(data), d, comment)
+        #return "%.8d %8.3f ID: %.3x, Priority: %d, PGN: %d (%s), SA: %d,  Len: %.2x, Data: %-18s\t%s" % (idx, ts, arbid, priority, pgn, pgnName, sourceAddress, len(data), data.encode('hex'), comment)
 
     def filterCanMsgs(self, start_msg=0, stop_msg=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None, priorities=None, pgns=None, sourceAddresses=None, spns=None, ignore=[]):
         '''
@@ -149,10 +156,16 @@ class J1939:
         else:
             filter_ids = None
         self.c.log("filtering messages...")
-        filteredMsgs = [(idx, ts,arbid, pgn, msg) for idx, ts,arbid, pgn, msg in self.genCanMsgs(start_msg, stop_msg, arbids=arbids, priorities=priorities, pgns=pgns,sourceAddresses=sourceAddresses)
+        filteredMsgs = [(idx, ts,arbid, pgn, msg) for idx, ts,arbid, pgn, msg in self.genCanMsgs(start_msg, stop_msg, arbids=arbids, priorities=priorities, pgns=pgns,sourceAddresses=sourceAddresses, spns=spns)
                 if (type(arbids) == list and arbid in arbids) or arbid not in ignore and (filter_ids==None or arbid not in filter_ids)]
 # (idx, ts, arbid, pgn, data)
         return filteredMsgs
+
+    def getSPNs(self,pgn):
+        try:
+            return self.j1939DB['J1939PGNdb'][str(pgn)]['SPNs']
+        except:
+            pass
 
     def genCanMsgs(self, start=0, stop=None, arbids=None, priorities=None, pgns=None, sourceAddresses=None, spns=None):
             '''
@@ -169,9 +182,9 @@ class J1939:
                 ts, msg = messages[idx]
 
                 arbid, data = self._splitCanMsg(msg)
-                priority, pgn, pgnName , sa = splitID(self,arbid)
-                #spns=getSPNs(self,pgn)
-
+                priority, pgn, pgnName, sourceAddress = self.splitID(arbid)
+                spns1=self.getSPNs(pgn)
+                #print "spns1= ", spns1
 
                 if arbids != None and arbid not in arbids:
                     # allow filtering of arbids
@@ -185,7 +198,9 @@ class J1939:
                 if sourceAddresses != None and sa not in sourceAddresses:
                     # allow filtering of arbids
                    continue
-
+                if spns != None and spns1 not in spns:
+                    # allow filtering of arbids
+                   continue
 
                 yield((idx, ts, arbid, pgn, data))
 
@@ -201,26 +216,33 @@ class J1939:
             data = msg[4:]
             return arbid, data
 
-def splitID(self, arbid):
-    priority = arbid >> 26 & 0b111
-    pgn = arbid >> 8 & 0b00001111111111111111
-    sourceAddress = arbid & 0b00000000000000000000011111111
-    pgnName = getPgnName(self, pgn)
-    return priority, pgn, pgnName , sourceAddress
+    def getSpnName(self, spn):
+        name = self.j1939DB['J1939SPNdb'][str(spn)]['Name']
+        #bin(0xf07d84b11200f084>>48 & ((1 << 8))-1)
+        print "SPN %s: (%s) " % (str(spn),name)
 
-def getPgnName(self, pgn):
-    try:
-        return self.j1939DB['J1939PGNdb'][str(pgn)]['Name']
-    except:
-        #print "PGN: ", pgn, "not found.\n"
-        pass
+    def splitID(self, arbid):
+        priority = arbid >> 26 & 0b111
+        pgn = arbid >> 8 & 0b00001111111111111111
+        sourceAddress = arbid & 0b00000000000000000000011111111
+        pgnName = self.getPgnName(pgn)
+        return priority, pgn, pgnName , sourceAddress
 
-def getSPNs(self,pgn):
-    try:
-        return self.j1939DB['J1939PGNdb'][str(pgn)]['SPNs']
-    except:
-        pass
+    def getPgnName(self, pgn):
+        try:
+            return self.j1939DB['J1939PGNdb'][str(pgn)]['Name']
+        except:
+            #print "PGN: ", pgn, "not found.\n"
+            pass
 
+def getSpnInfo(self, spn, data):
+    startBit= self.j1939DB['J1939SPNdb'][str(spn)]['StartBit']
+    spnLength= self.j1939DB['J1939SPNdb'][str(spn)]['SPNLength']
+    value = (data >> startBit & ((1 << spnLength))-1)
+    #name = self.j1939DB['J1939SPNdb'][str(spn)]['Name']
+    #bin(0xf07d84b11200f084>>48 & ((1 << 8))-1)
+    return "%s: %s, " % (str(spn),str(value))
+    #return str(value), name
 
 def hasAscii(msg, minbytes=4, strict=True):
     '''

@@ -17,7 +17,7 @@ class J1939:
     def readJ1939DB(self):
         f=open("J1939db.json", "r")
         self.j1939DB = json.load(f)
-
+# printJ1939Msgs --> reprCanMsgs --> filterCanMsgs --> genCanMsgs --> reprCanMsg
     def printJ1939Msgs(self, start_msg=0, stop_msg=None, start_bkmk=None, stop_bkmk=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None, priorities=None, pgns=None, sourceAddresses=None, spns=None, ignore=[]):
         print self.reprCanMsgs(start_msg, stop_msg, start_bkmk, stop_bkmk, start_baseline_msg, stop_baseline_msg, arbids, priorities, pgns, sourceAddresses, spns, ignore)
 
@@ -165,7 +165,7 @@ class J1939:
         try:
             return self.j1939DB['J1939PGNdb'][str(pgn)]['SPNs']
         except:
-            pass
+            return None
 
     def genCanMsgs(self, start=0, stop=None, arbids=None, priorities=None, pgns=None, sourceAddresses=None, spns=None):
             '''
@@ -183,8 +183,7 @@ class J1939:
 
                 arbid, data = self._splitCanMsg(msg)
                 priority, pgn, pgnName, sourceAddress = self.splitID(arbid)
-                spns1=self.getSPNs(pgn)
-                #print "spns1= ", spns1
+                currentSPNs=self.getSPNs(pgn)
 
                 if arbids != None and arbid not in arbids:
                     # allow filtering of arbids
@@ -195,12 +194,25 @@ class J1939:
                 if priorities != None and priority not in priorities:
                     # allow filtering of arbids
                     continue
-                if sourceAddresses != None and sa not in sourceAddresses:
+                if sourceAddresses != None and sourceAddress not in sourceAddresses:
                     # allow filtering of arbids
                    continue
-                if spns != None and spns1 not in spns:
-                    # allow filtering of arbids
-                   continue
+                # spns: associated spns with the PGN. spns1: the acutal values in the data field of the J1939 message
+                #if spns != None and currentSPNs != None and not spns.issubset(currentSPNs):
+                    #continue
+                if spns != None and currentSPNs == None: # To avoid printing frames with empty data fields (i.e., no defined SPNs)
+                    continue
+                '''
+                if spns != None:
+                    for spn in spns:
+                        if spn not in currentSPNs:
+                            continue
+                '''
+                if currentSPNs != None and spns != None and not any(x in spns for x in currentSPNs):
+                    continue
+                    #print "idx:", idx, "data: ", data, " ", int(data.encode('hex'), 16), "len: ", len(data), "type: ",type(data), "spns1:", spns1, "type: ", type(spns1), "size: ", len(spns1)
+                    #if spns1 != None and spns != None and not spns.issubset(spns1):
+                    #if not spns.issubset(spns1):
 
                 yield((idx, ts, arbid, pgn, data))
 
@@ -234,6 +246,28 @@ class J1939:
         except:
             #print "PGN: ", pgn, "not found.\n"
             pass
+
+
+    def J1939xmitIDwithMsg(self, arbid, message, extflag=0, timeout=3, count=1):
+        '''
+        Transmit a CAN message on the attached CAN bus
+        Currently returns the *last* result
+        '''
+        msg = struct.pack('>I', arbid) + chr(extflag) + message
+
+        for i in range(count):
+            self._send(CMD_CAN_SEND, msg)
+            ts, result = self.recv(CMD_CAN_SEND_RESULT, timeout)
+
+        if result == None:
+            print "CANxmit:  Return is None!?"
+        resval = ord(result)
+        if resval != 0:
+            print "CANxmit() failed: %s" % CAN_RESPS.get(resval)
+
+        return resval
+
+    #def J1939J1939xmitPGNwithSPNs(self, pgn, spns)
 
 def getSpnInfo(self, spn, data):
     startBit= self.j1939DB['J1939SPNdb'][str(spn)]['StartBit']

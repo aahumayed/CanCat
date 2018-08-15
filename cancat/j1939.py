@@ -17,11 +17,27 @@ class J1939:
     def readJ1939DB(self):
         f=open("J1939db.json", "r")
         self.j1939DB = json.load(f)
-# printJ1939Msgs --> reprCanMsgs --> filterCanMsgs --> genCanMsgs --> reprCanMsg
+# printJ1939Msgs --> reprJ1939Msgs --> filterJ1939Msgs --> genJ1939Msgs --> reprJ1939Msg
     def printJ1939Msgs(self, start_msg=0, stop_msg=None, start_bkmk=None, stop_bkmk=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None, priorities=None, pgns=None, sourceAddresses=None, spns=None, ignore=[]):
-        print self.reprCanMsgs(start_msg, stop_msg, start_bkmk, stop_bkmk, start_baseline_msg, stop_baseline_msg, arbids, priorities, pgns, sourceAddresses, spns, ignore)
+        '''
+        This function decodes CAN messages into J1939 format. Examples of usage:
+        1) Importing and creating a J1939 object
+        import j1939
+        j=j1939.J1939(c)
+        2) Decode messages without filtering:
+        j.printJ1939Msgs()
+        3) Filter by PGN by passing a list of PGNs:
+        j.printJ1939Msgs(pgns={61441,0x123})
+        4) Filter by source addresses
+        j.printJ1939Msgs(sourceAddresses={1,3,6})
+        5) Filter by Priority:
+        j.printJ1939Msgs(priorities={0,7})
+        6) Filter by spns:
+        j.printJ1939Msgs(spns={520,190})
+        '''
+        print self.reprJ1939Msgs(start_msg, stop_msg, start_bkmk, stop_bkmk, start_baseline_msg, stop_baseline_msg, arbids, priorities, pgns, sourceAddresses, spns, ignore)
 
-    def reprCanMsgs(self, start_msg=0, stop_msg=None, start_bkmk=None, stop_bkmk=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None,priorities=None, pgns=None, sourceAddresses=None, spns=None, ignore=[]):
+    def reprJ1939Msgs(self, start_msg=0, stop_msg=None, start_bkmk=None, stop_bkmk=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None,priorities=None, pgns=None, sourceAddresses=None, spns=None, ignore=[]):
         '''
         String representation of a set of CAN Messages.
         These can be filtered by start and stop message indexes, as well as
@@ -70,7 +86,7 @@ class J1939:
         data_repeat = 0
         data_similar = 0
 
-        for idx, ts, arbid, pgns, msg in self.filterCanMsgs(start_msg, stop_msg, start_baseline_msg, stop_baseline_msg, arbids=arbids, priorities=priorities, pgns=pgns,sourceAddresses=sourceAddresses, spns=spns, ignore=ignore):
+        for idx, ts, arbid, pgns, msg in self.filterJ1939Msgs(start_msg, stop_msg, start_baseline_msg, stop_baseline_msg, arbids=arbids, priorities=priorities, pgns=pgns,sourceAddresses=sourceAddresses, spns=spns, ignore=ignore):
             diff = []
 
             # insert bookmark names/comments in appropriate places
@@ -117,7 +133,7 @@ class J1939:
             else:
                 diff.append("TS_delta: %.3f" % delta_ts)
 
-            out.append(self.reprCanMsg(idx, ts, arbid, msg, comment='\t'.join(diff)))
+            out.append(self.reprJ1939Msg(idx, ts, arbid, msg, comment='\t'.join(diff)))
             last_ts = ts
             last_msg = msg
 
@@ -125,21 +141,21 @@ class J1939:
 
         return "\n".join(out)
 
-    def reprCanMsg(self, idx, ts, arbid, data, comment=None):
-        #TODO: make some repr magic that spits out known ARBID's and other subdata
+    def reprJ1939Msg(self, idx, ts, arbid, data, comment=None):
+        #TODO: make decoding spns optional
         if comment == None:
             comment = ''
         priority, pgn, pgnName, sourceAddress = self.splitID(arbid)
         spns= self.getSPNs(pgn)
         d = ""
+        #TODO SPNs are appended to data in a different order than the actual CAN frame, not sure if this is of significance
         if spns != None:
             for spn in spns:
-                d+= getSpnInfo(self, spn,int(data.encode('hex'), 16))
+                d+= self.getSpnInfo(spn,int(data.encode('hex'), 16))
                 #d+='SPN: ',value,', (',name,') '
         return "%.8d %8.3f ID: %.3x, Priority: %d, PGN: %d, SA: %d,  Len: %.2x, Data: %-18s\t%s" % (idx, ts, arbid, priority, pgn, sourceAddress, len(data), d, comment)
-        #return "%.8d %8.3f ID: %.3x, Priority: %d, PGN: %d (%s), SA: %d,  Len: %.2x, Data: %-18s\t%s" % (idx, ts, arbid, priority, pgn, pgnName, sourceAddress, len(data), data.encode('hex'), comment)
 
-    def filterCanMsgs(self, start_msg=0, stop_msg=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None, priorities=None, pgns=None, sourceAddresses=None, spns=None, ignore=[]):
+    def filterJ1939Msgs(self, start_msg=0, stop_msg=None, start_baseline_msg=None, stop_baseline_msg=None, arbids=None, priorities=None, pgns=None, sourceAddresses=None, spns=None, ignore=[]):
         '''
         returns the received CAN messages between indexes "start_msg" and "stop_msg"
         but only messages to ID's that *do not* appear in the the baseline indicated
@@ -151,23 +167,25 @@ class J1939:
         if stop_baseline_msg != None:
             self.c.log("ignoring arbids from baseline...")
             # get a list of baseline arbids
-            filter_ids = { arbid:1 for ts,arbid,data in self.genCanMsgs(start_baseline_msg, stop_baseline_msg)
+            filter_ids = { arbid:1 for ts,arbid,data in self.genJ1939Msgs(start_baseline_msg, stop_baseline_msg)
                 }.keys()
         else:
             filter_ids = None
         self.c.log("filtering messages...")
-        filteredMsgs = [(idx, ts,arbid, pgn, msg) for idx, ts,arbid, pgn, msg in self.genCanMsgs(start_msg, stop_msg, arbids=arbids, priorities=priorities, pgns=pgns,sourceAddresses=sourceAddresses, spns=spns)
+        filteredMsgs = [(idx, ts,arbid, pgn, msg) for idx, ts,arbid, pgn, msg in self.genJ1939Msgs(start_msg, stop_msg, arbids=arbids, priorities=priorities, pgns=pgns,sourceAddresses=sourceAddresses, spns=spns)
                 if (type(arbids) == list and arbid in arbids) or arbid not in ignore and (filter_ids==None or arbid not in filter_ids)]
-# (idx, ts, arbid, pgn, data)
         return filteredMsgs
 
     def getSPNs(self,pgn):
+        '''
+        Returns a list of spns used in the passed PGN
+        '''
         try:
             return self.j1939DB['J1939PGNdb'][str(pgn)]['SPNs']
         except:
             return None
 
-    def genCanMsgs(self, start=0, stop=None, arbids=None, priorities=None, pgns=None, sourceAddresses=None, spns=None):
+    def genJ1939Msgs(self, start=0, stop=None, arbids=None, priorities=None, pgns=None, sourceAddresses=None, spns=None):
             '''
             CAN message generator.  takes in start/stop indexes as well as a list
             of desired arbids (list)
@@ -189,30 +207,22 @@ class J1939:
                     # allow filtering of arbids
                     continue
                 if pgns != None and pgn not in pgns:
-                    # allow filtering of arbids
+                    # allow filtering of pgns
                     continue
                 if priorities != None and priority not in priorities:
-                    # allow filtering of arbids
+                    # allow filtering of priorities
                     continue
                 if sourceAddresses != None and sourceAddress not in sourceAddresses:
-                    # allow filtering of arbids
+                    # allow filtering of sourceAddresses
                    continue
                 # spns: associated spns with the PGN. spns1: the acutal values in the data field of the J1939 message
                 #if spns != None and currentSPNs != None and not spns.issubset(currentSPNs):
                     #continue
-                if spns != None and currentSPNs == None: # To avoid printing frames with empty data fields (i.e., no defined SPNs)
+                #SPNs filtering needs two steps: 1) filter out frames with empty data fields (i.e., no defined SPNs), and then 2) filter out data fields that do not contain the specified spns
+                if spns != None and currentSPNs == None:
                     continue
-                '''
-                if spns != None:
-                    for spn in spns:
-                        if spn not in currentSPNs:
-                            continue
-                '''
                 if currentSPNs != None and spns != None and not any(x in spns for x in currentSPNs):
                     continue
-                    #print "idx:", idx, "data: ", data, " ", int(data.encode('hex'), 16), "len: ", len(data), "type: ",type(data), "spns1:", spns1, "type: ", type(spns1), "size: ", len(spns1)
-                    #if spns1 != None and spns != None and not spns.issubset(spns1):
-                    #if not spns.issubset(spns1):
 
                 yield((idx, ts, arbid, pgn, data))
 
@@ -229,54 +239,122 @@ class J1939:
             return arbid, data
 
     def getSpnName(self, spn):
+        '''
+        This is a helper function where you pass a PGN value and get its name
+        '''
         name = self.j1939DB['J1939SPNdb'][str(spn)]['Name']
         #bin(0xf07d84b11200f084>>48 & ((1 << 8))-1)
         print "SPN %s: (%s) " % (str(spn),name)
 
     def splitID(self, arbid):
+        '''
+        This function extracts and returns priority, PGN, and SA from a 29-bit ID
+        '''
         priority = arbid >> 26 & 0b111
         pgn = arbid >> 8 & 0b00001111111111111111
         sourceAddress = arbid & 0b00000000000000000000011111111
         pgnName = self.getPgnName(pgn)
         return priority, pgn, pgnName , sourceAddress
 
+    def constructID(self, priority, pgn, sourceAddress):
+        '''
+        It is used in J1939xmit and it constructs a 29-bit ID given the 3 building blocks (priority, pgn, and sourceAddress)
+        Example:
+        hex(j.constructID(3,61440,0))
+        '''
+        arbid =0
+        arbid |= priority << 26
+        arbid |= pgn << 8
+        arbid |= sourceAddress
+        return arbid
+
     def getPgnName(self, pgn):
+        '''
+        A utility function that returns a PGN's name by passing it
+        Example:
+        In [32]: j.getPgnName(61440)
+        Out[32]: u'Electronic Retarder Controller 1'
+        '''
         try:
             return self.j1939DB['J1939PGNdb'][str(pgn)]['Name']
         except:
             #print "PGN: ", pgn, "not found.\n"
             pass
 
-
-    def J1939xmitIDwithMsg(self, arbid, message, extflag=0, timeout=3, count=1):
+    def constructSPNs(self, spns):
         '''
-        Transmit a CAN message on the attached CAN bus
+        This function receives a dictionary of spn key-value pairs and returns the correcsponding data field that can be transmitted
+        Populated spns get they assigned values, whereas the unpopulated get 0xFF.. values
+        constructSPNs(spns={190:0x6813, 520:0x12})
+        IMPORTANT: This function is incompleteself.
+        In [26]: hex(j.constructSPNs(spns={190:0x6813}))
+        constructSPNs(spns): spns=  {190: 0x6813}
+        Out[26]: '0x6813000000' ==> spn value starting at the correct startBit position (bytes 4 and 5)
+        In [27]: hex(j.constructSPNs(spns={1675:13}))
+        constructSPNs(spns): spns=  {1675: 13}
+        Out[27]: '0xd000000000000' (starting at position 7.1)
+        TODO: Instead of returning the spn values, these need to be appended to a data variable until the whole list of spns is constructed
+        '''
+        data = ""
+        print "constructSPNs(spns): spns= ", spns
+        print "type: ", type(spns)
+        for k, v in spns.iteritems():
+            print k, ': ', v
+            startBit= self.j1939DB['J1939SPNdb'][str(k)]['StartBit']
+            spnLength= self.j1939DB['J1939SPNdb'][str(k)]['SPNLength']
+            msg= v <<startBit
+            mask = ((1<<spnLength)-1)<<startBit
+
+        return (msg or mask)
+
+        #name = self.j1939DB['J1939SPNdb'][str(spn)]['Name']
+        #bin(0xf07d84b11200f084>>48 & ((1 << 8))-1)
+        return "%s: %s, " % (str(spn),str(value))
+        return data
+    def J1939xmit(self, priority, pgn, sourceAddress, data=None,spns=None, timeout=3, count=1):
+        '''
+        Transmit a J1939 message on the attached CAN bus
         Currently returns the *last* result
+        Examples of usage:
+        j.J1939xmit(7,61444,4, data='FFFFFF6813FFFFFF'.decode('hex')) ==> Works as expected
+        j.J1939xmit(7,61444,4, spns={190:0x123, 571:0x1122}) ===> Incomplete, please check the "half-baked" constructSPNs function
         '''
-        msg = struct.pack('>I', arbid) + chr(extflag) + message
-
+        extflag = 1 # always 1 because J1939 uses 29-bit IDs
+        id= self.constructID(priority,pgn,sourceAddress)
+        #TODO spns needs to receive the correct constructed SPNs returned from constructSPNs function
+        #spns= self.constructSPNs(spns)# Returns spn-friendly data
+        msg = struct.pack('>I',id)+chr(extflag)+data#'FFFFFF6813FFFFFF'.decode('hex')
+        print "msg= ", msg
         for i in range(count):
-            self._send(CMD_CAN_SEND, msg)
-            ts, result = self.recv(CMD_CAN_SEND_RESULT, timeout)
+            self.c._send(0x44, msg)
+            ts, result = self.c.recv(0x34, timeout)
 
         if result == None:
-            print "CANxmit:  Return is None!?"
+            print "J1939xmit:  Return is None!?"
         resval = ord(result)
         if resval != 0:
-            print "CANxmit() failed: %s" % CAN_RESPS.get(resval)
+            print "J1939xmit() failed: %s" % self.c.CAN_RESPS.get(resval)
 
         return resval
 
-    #def J1939J1939xmitPGNwithSPNs(self, pgn, spns)
-
-def getSpnInfo(self, spn, data):
-    startBit= self.j1939DB['J1939SPNdb'][str(spn)]['StartBit']
-    spnLength= self.j1939DB['J1939SPNdb'][str(spn)]['SPNLength']
-    value = (data >> startBit & ((1 << spnLength))-1)
-    #name = self.j1939DB['J1939SPNdb'][str(spn)]['Name']
-    #bin(0xf07d84b11200f084>>48 & ((1 << 8))-1)
-    return "%s: %s, " % (str(spn),str(value))
-    #return str(value), name
+    def getSpnInfo(self, spn, data):
+        #TODO Need to catch an error when spn is not in the passed data
+        '''
+        A utility function critical in extracting spns' info from data
+        Example:
+        getSpnInfo(190,0x1245)
+        In [7]: j.getSpnInfo(190,0xaabbccddeeff)
+        Out[7]: '190: 48076, '
+        In [8]: hex(48076)
+        Out[8]: '0xbbcc'
+        '''
+        startBit= self.j1939DB['J1939SPNdb'][str(spn)]['StartBit']
+        spnLength= self.j1939DB['J1939SPNdb'][str(spn)]['SPNLength']
+        value = (data >> startBit & ((1 << spnLength))-1)
+        #name = self.j1939DB['J1939SPNdb'][str(spn)]['Name']
+        #bin(0xf07d84b11200f084>>48 & ((1 << 8))-1)
+        return "%s: %s, " % (str(spn),str(value))
+        #return str(value), name
 
 def hasAscii(msg, minbytes=4, strict=True):
     '''

@@ -15,6 +15,10 @@ class J1939:
         self.readJ1939DB()
 
     def readJ1939DB(self):
+        '''
+        The json file is retrieved from:
+        Copyright (c) 2017-2018 Jeremy Daily, The University of Tulsa
+        '''
         f=open("J1939db.json", "r")
         self.j1939DB = json.load(f)
 # printJ1939Msgs --> reprJ1939Msgs --> filterJ1939Msgs --> genJ1939Msgs --> reprJ1939Msg
